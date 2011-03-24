@@ -83,12 +83,14 @@ static const NSInteger kMaxConcurrentLoads = 5;
 
 	_queueTimer = nil;
 
-	for (RKRequest* request in _requests) {
+  NSArray *requests = [_requests copy];
+	for (RKRequest* request in requests) {
 		if (![request isLoading] && ![request isLoaded] && _totalLoading < kMaxConcurrentLoads) {
 			++_totalLoading;
 			[self dispatchRequest:request];
 		}
 	}
+  [requests release];
 
 	if (_requests.count && !_suspended) {
 		[self loadNextInQueueDelayed];
