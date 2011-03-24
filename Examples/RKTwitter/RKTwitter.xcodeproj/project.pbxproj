@@ -98,7 +98,7 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = 2538E7FF123417E500ACB5D7 /* RestKit.xcodeproj */;
 			proxyType = 1;
-			remoteGlobalIDString = 25956956126DF0A8004BAC4C;
+			remoteGlobalIDString = 255B7588133BABBF00ED76AD;
 			remoteInfo = RestKit;
 		};
 /* End PBXContainerItemProxy section */
