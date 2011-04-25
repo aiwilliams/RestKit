@@ -7,10 +7,8 @@
 //
 
 #import "RKSpecEnvironment.h"
-#import "RKDynamicRouter.h"
-#import "RKHuman.h"
-#import "RKObjectManager.h"
 #import "RKManagedObjectStore.h"
+#import "RKHuman.h"
 
 @interface RKDynamicRouterSpec : NSObject <UISpec> {
 }
@@ -20,8 +18,8 @@
 @implementation RKDynamicRouterSpec
 
 - (void)beforeAll {
-	RKObjectManager* objectManager = [RKObjectManager objectManagerWithBaseURL:@"http://localhost:3001"];
-	objectManager.objectStore = [[RKManagedObjectStore alloc] initWithStoreFilename:@"RestKitSpecs.sqlite"];
+	RKObjectManager* objectManager = [RKObjectManager objectManagerWithBaseURL:@"http://localhost:4567"];
+	objectManager.objectStore = [RKManagedObjectStore objectStoreWithStoreFilename:@"RestKitSpecs.sqlite"];
 }
 
 -(void)itShouldThrowAnExceptionWhenAskedForAPathForAnUnregisteredClassAndMethod {

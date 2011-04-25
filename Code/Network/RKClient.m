@@ -6,10 +6,12 @@
 //  Copyright 2009 Two Toasters. All rights reserved.
 //
 
+#import <SystemConfiguration/SCNetworkReachability.h>
 #import "RKClient.h"
 #import "RKObjectLoader.h"
 #import "RKURL.h"
-#import <SystemConfiguration/SCNetworkReachability.h>
+#import "RKNotifications.h"
+#import "RKAlert.h"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Global
@@ -104,11 +106,16 @@ NSString* RKMakePathWithObject(NSString* path, id object) {
 }
 
 - (id)init {
-	if (self = [super init]) {
+    self = [super init];
+	if (self) {
 		_HTTPHeaders = [[NSMutableDictionary alloc] init];
 		self.serviceUnavailableAlertEnabled = NO;
 		self.serviceUnavailableAlertTitle = NSLocalizedString(@"Service Unavailable", nil);
 		self.serviceUnavailableAlertMessage = NSLocalizedString(@"The remote resource is unavailable. Please try again later.", nil);
+        [[NSNotificationCenter defaultCenter] addObserver:self 
+                                                 selector:@selector(serviceDidBecomeUnavailableNotification:) 
+                                                     name:RKServiceDidBecomeUnavailableNotification 
+                                                   object:nil];
 	}
 
 	return self;
@@ -121,6 +128,7 @@ NSString* RKMakePathWithObject(NSString* path, id object) {
 	self.serviceUnavailableAlertTitle = nil;
 	self.serviceUnavailableAlertMessage = nil;
 	[_HTTPHeaders release];
+    
 	[super dealloc];
 }
 
@@ -176,7 +184,7 @@ NSString* RKMakePathWithObject(NSString* path, id object) {
     }
 }
 
-- (RKRequest*)requestWithResourcePath:(NSString*)resourcePath delegate:(id)delegate {
+- (RKRequest*)requestWithResourcePath:(NSString*)resourcePath delegate:(NSObject<RKRequestDelegate>*)delegate {
 	RKRequest* request = [[RKRequest alloc] initWithURL:[self URLForResourcePath:resourcePath] delegate:delegate];
 	[self setupRequest:request];
 	[request autorelease];
@@ -218,6 +226,12 @@ NSString* RKMakePathWithObject(NSString* path, id object) {
 
 - (RKRequest*)delete:(NSString*)resourcePath delegate:(id)delegate {
 	return [self load:resourcePath method:RKRequestMethodDELETE params:nil delegate:delegate];
+}
+
+- (void)serviceDidBecomeUnavailableNotification:(NSNotification*)notification {
+    if (self.serviceUnavailableAlertEnabled) {
+        RKAlertWithTitle(self.serviceUnavailableAlertMessage, self.serviceUnavailableAlertTitle);
+    }
 }
 
 @end

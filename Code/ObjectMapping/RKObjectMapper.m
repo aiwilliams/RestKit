@@ -14,13 +14,13 @@
 #import "RKObjectMapper.h"
 #import "NSDictionary+RKAdditions.h"
 #import "RKJSONParser.h"
+#import "RKXMLParser.h"
 #import "Errors.h"
 
 // Default format string for date and time objects from Rails
 // TODO: Rails specifics should probably move elsewhere...
 static const NSString* kRKModelMapperRailsDateTimeFormatString = @"yyyy-MM-dd'T'HH:mm:ss'Z'"; // 2009-08-08T17:23:59Z
 static const NSString* kRKModelMapperRailsDateFormatString = @"MM/dd/yyyy";
-static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatParser";
 
 @interface RKObjectMapper (Private)
 
@@ -29,8 +29,8 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 - (Class)typeClassForProperty:(NSString*)property ofClass:(Class)class;
 - (NSDictionary*)elementToPropertyMappingsForModel:(id)model;
 
-- (id)findOrCreateInstanceOfModelClass:(Class)class fromElements:(NSDictionary*)elements;
-- (id)createOrUpdateInstanceOfModelClass:(Class)class fromElements:(NSDictionary*)elements;
+- (NSObject<RKObjectMappable>*)findOrCreateInstanceOfModelClass:(Class)class fromElements:(NSDictionary*)elements;
+- (NSObject<RKObjectMappable>*)createOrUpdateInstanceOfModelClass:(Class)class fromElements:(NSDictionary*)elements;
 
 - (void)updateModel:(id)model ifNewPropertyValue:(id)propertyValue forPropertyNamed:(NSString*)propertyName; // Rename!
 - (void)updateModel:(id)model fromElements:(NSDictionary*)elements;
@@ -84,9 +84,6 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 }
 
 - (void)setFormat:(RKMappingFormat)format {
-	if (format == RKMappingFormatXML) {
-		[NSException raise:@"No XML parser is available" format:@"RestKit does not currently have XML support. Use JSON."];
-	}
 	_format = format;
 }
 
@@ -94,16 +91,23 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 // Mapping from a string
 
 - (id)parseString:(NSString*)string {
-	NSMutableDictionary* threadDictionary = [[NSThread currentThread] threadDictionary];
-	NSObject<RKParser>* parser = [threadDictionary objectForKey:kRKModelMapperMappingFormatParserKey];
-	if (!parser) {
-		if (_format == RKMappingFormatJSON) {
-			parser = [[RKJSONParser alloc] init];
-			[threadDictionary setObject:parser forKey:kRKModelMapperMappingFormatParserKey];
-			[parser release];
-		}
-	}
+    Class parserClass;
+    NSString* className = nil;
+    NSObject<RKParser>* parser = nil;
+    
+    if (_format == RKMappingFormatJSON) {
+        className = @"RKJSONParser";
+    } else if (_format == RKMappingFormatXML) {
+        className = @"RKXMLParser";
+    }
+    
+    parserClass = NSClassFromString(className);
+    if (nil == parserClass) {
+        [NSException raise:@"Unable to find an appropriate parser." 
+                    format:@"The object mapper attempted to process a payload via the '%@' parser, but it was not found.", className];
+    }
 	
+    parser = [[parserClass alloc] init];
 	id result = nil;
 	@try {
 		result = [parser objectFromString:string];
@@ -111,6 +115,8 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 	@catch (NSException* e) {
 		NSLog(@"[RestKit] RKObjectMapper:parseString: Exception (%@) parsing error from string: %@", [e reason], string);
 	}
+    [parser release];
+    
 	return result;
 }
 
@@ -197,7 +203,7 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 	}
 }
 
-- (NSObject<RKObjectMappable>*)mapObjectFromDictionary:(NSDictionary*)dictionary toClass:(Class)class {
+- (id)mapObjectFromDictionary:(NSDictionary*)dictionary toClass:(Class)class {
 	return [self createOrUpdateInstanceOfModelClass:class fromElements:dictionary];
 }
 
@@ -207,10 +213,20 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
   // TODO: Makes assumptions about the structure of the JSON...
 	NSString* elementName = [[dictionary allKeys] objectAtIndex:0];
 	Class class = [_elementToClassMappings objectForKey:elementName];
-	NSDictionary* elements = [dictionary objectForKey:elementName];
+	id elements = [dictionary objectForKey:elementName];
 	
-	id model = [self findOrCreateInstanceOfModelClass:class fromElements:elements];
-	[self updateModel:model fromElements:elements];
+    // Support case where elements is an Array of objects
+    id model = nil;
+    if ([elements isKindOfClass:[NSDictionary class]]) {
+        model = [self findOrCreateInstanceOfModelClass:class fromElements:elements];
+        [self updateModel:model fromElements:elements];        
+    } else if ([elements isKindOfClass:[NSArray class]]) {
+        model = [self mapObjectsFromArrayOfDictionaries:elements toClass:class];
+    } else {
+        // TODO: Do we want to blow up or log???
+        NSLog(@"Unable to determine how to map object: %@", elements);
+    }
+    
 	return model;
 }
 
@@ -231,11 +247,34 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 	return (NSArray*)objects;
 }
 
-- (NSArray*)mapObjectsFromArrayOfDictionaries:(NSArray*)array toClass:(Class<RKObjectMappable>)class {
+- (NSDictionary*)mappableElementsForDictionary:(NSDictionary*)elements withObjectClass:(Class<RKObjectMappable>)objectClass {
+    NSArray* elementNames = [_elementToClassMappings allKeysForObject:objectClass];
+	if ([elementNames count] > 0) {		
+		for (NSString* elementName in elementNames) {
+			if ([[elements allKeys] containsObject:elementName]) {
+				return [elements objectForKey:elementName];
+			}
+		}
+	}
+    
+    // Assume that this dictionary is not namespaced and return it
+    return elements;
+}
+
+- (NSArray*)mappableElementsForArrayOfDictionaries:(NSArray*)dictionaries withObjectClass:(Class<RKObjectMappable>)objectClass {
+    NSMutableArray* arrayOfElements = [NSMutableArray arrayWithCapacity:[dictionaries count]];
+    for (NSDictionary* elements in dictionaries) {
+        [arrayOfElements addObject:[self mappableElementsForDictionary:elements withObjectClass:objectClass]];
+    }
+    
+    return arrayOfElements;
+}
+
+- (NSArray*)mapObjectsFromArrayOfDictionaries:(NSArray*)array toClass:(Class<RKObjectMappable>)objectClass {
 	NSMutableArray* objects = [NSMutableArray array];
-	for (NSDictionary* dictionary in array) {
-		if (![dictionary isKindOfClass:[NSNull class]]) {
-			id object = [self createOrUpdateInstanceOfModelClass:class fromElements:dictionary];
+    for (NSDictionary* elements in [self mappableElementsForArrayOfDictionaries:array withObjectClass:objectClass]) {
+		if (![elements isKindOfClass:[NSNull class]]) {
+			id object = [self createOrUpdateInstanceOfModelClass:objectClass fromElements:elements];
 			[objects addObject:object];
 		}
 	}
@@ -330,7 +369,7 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 - (void)setPropertiesOfModel:(NSObject<RKObjectMappable>*)model fromElements:(NSDictionary*)elements {
 	NSDictionary* elementToPropertyMappings = [self elementToPropertyMappingsForModel:model];
 	for (NSString* elementKeyPath in elementToPropertyMappings) {		
-		id elementValue = nil;		
+		id elementValue = nil;
 		BOOL setValue = YES;
 		
 		@try {
@@ -341,8 +380,7 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 			setValue = NO;
 		}
 		
-		// TODO: Need a way to differentiate between a keyPath that exists, but contains a nil
-		// value and one that is not present in the payload. Causes annoying problems!
+		// nil is returned when the collection does not contain the element
 		if (nil == elementValue) {
 			setValue = (_missingElementMappingPolicy == RKSetNilForMissingElementMappingPolicy);
 		}
@@ -356,7 +394,30 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 					NSDate* date = [self parseDateFromString:(propertyValue)];
 					propertyValue = [self dateInLocalTime:date];
 				}
+                else if ([class isEqual:[NSDecimalNumber class]]) {
+                    propertyValue = [NSDecimalNumber decimalNumberWithString:propertyValue];
+                }
 			}
+            
+            // If we know the destination class, the property is not of the correct class, and the property value is not null or nil...
+            // if (class && propertyValue && ![propertyValue isKindOfClass:class] && ![propertyValue isEqual:[NSNull null]]) {
+            if (class && propertyValue && ![propertyValue isKindOfClass:class] && ![propertyValue isEqual:[NSNull null]]) {
+                // Then we must cooerce the element (probably a string) into the correct class.
+                // Currently this only supports NSNumbers (NSDates are handled above).
+                // New cooersions will be added on an as-needed basis.
+                if (class == [NSNumber class]) {
+                    if ([propertyValue isEqualToString:@"true"] ||
+                        [propertyValue isEqualToString:@"false"]) {
+                        propertyValue = [NSNumber numberWithBool:[propertyValue isEqualToString:@"true"]];
+                    } else {
+                        propertyValue = [NSNumber numberWithDouble:[propertyValue doubleValue]];
+                    }
+                } else if (class == [NSURL class] && [propertyValue isKindOfClass:[NSString class]]) {
+                    propertyValue = [NSURL URLWithString:propertyValue];
+                } else {
+                    [NSException raise:@"NoElementValueConversionMethod" format:@"Don't know how to convert %@ (%@) to %@", propertyValue, [propertyValue class], class];
+                }
+            }
 			
 			[self updateModel:model ifNewPropertyValue:propertyValue forPropertyNamed:propertyName];
 		}
@@ -376,6 +437,16 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
 			NSLog(@"Caught exception:%@ when trying valueForKeyPath with path:%@ for elements:%@", e, elementKeyPath, elements);
 		}
         
+        // Handle missing elements for the relationship
+        if (relationshipElements == nil) {
+            if (self.missingElementMappingPolicy == RKSetNilForMissingElementMappingPolicy) {
+                [object setValue:nil forKey:propertyName];
+                continue;
+            } else if(self.missingElementMappingPolicy == RKIgnoreMissingElementMappingPolicy) {
+                continue;
+            }
+        }
+        
         // NOTE: The last part of the keyPath contains the elementName for the mapped destination class of our children
         NSArray* componentsOfKeyPath = [elementKeyPath componentsSeparatedByString:@"."];
         NSString *className = [componentsOfKeyPath objectAtIndex:[componentsOfKeyPath count] - 1];
@@ -389,8 +460,7 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
         }
         
         Class collectionClass = [self typeClassForProperty:propertyName ofClass:[object class]];
-        if ([collectionClass isSubclassOfClass:[NSSet class]] || [collectionClass isSubclassOfClass:[NSArray class]])
-        {
+        if ([collectionClass isSubclassOfClass:[NSSet class]] || [collectionClass isSubclassOfClass:[NSArray class]]) {
             id children = nil;
             if ([collectionClass isSubclassOfClass:[NSSet class]]) {
                 children = [NSMutableSet setWithCapacity:[relationshipElements count]];
@@ -410,9 +480,9 @@ static const NSString* kRKModelMapperMappingFormatParserKey = @"RKMappingFormatP
             id child = [self createOrUpdateInstanceOfModelClass:modelClass fromElements:relationshipElements];		
             [object setValue:child forKey:propertyName];
         }
-        
     }
     
+    // Connect relationships by primary key
     Class managedObjectClass = NSClassFromString(@"RKManagedObject");
     if (managedObjectClass && [object isKindOfClass:managedObjectClass]) {
         RKManagedObject* managedObject = (RKManagedObject*)object;

@@ -16,9 +16,16 @@
 @implementation RKTwitterViewController
 
 - (void)loadTimeline {
-    // Load the object model via RestKit	
+  // Load the object model via RestKit	
 	RKObjectManager* objectManager = [RKObjectManager sharedManager];
-	[objectManager loadObjectsAtResourcePath:@"/status/user_timeline/restkit.json" objectClass:[RKTStatus class] delegate:self];
+    if (objectManager.format == RKMappingFormatJSON) {
+        [objectManager loadObjectsAtResourcePath:@"/status/user_timeline/RestKit" objectClass:[RKTStatus class] delegate:self];
+    } else {
+        RKObjectLoader* loader = [objectManager objectLoaderWithResourcePath:@"/status/user_timeline/RestKit" delegate:self];
+        loader.objectClass = [RKTStatus class];
+        loader.keyPath = @"statuses.status";
+        [loader send];
+    }
 }
 
 - (void)loadView {
@@ -53,8 +60,12 @@
 
 #pragma mark RKObjectLoaderDelegate methods
 
+- (void)request:(RKRequest*)request didLoadResponse:(RKResponse*)response {
+    NSLog(@"Loaded payload: %@", [response bodyAsString]);
+}
+
 - (void)objectLoader:(RKObjectLoader*)objectLoader didLoadObjects:(NSArray*)objects {
-	NSLog(@"Loaded statuses: %@", objects);
+	NSLog(@"Loaded statuses: %@", objects);    
 	[_statuses release];
 	_statuses = [objects retain];
 	[_tableView reloadData];

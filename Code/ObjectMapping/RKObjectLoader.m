@@ -6,9 +6,6 @@
 //  Copyright 2009 Two Toasters. All rights reserved.
 //
 
-// TODO: Factor this dependency out...
-#import <UIKit/UIKit.h>
-
 #import "RKObjectLoader.h"
 #import "RKObjectManager.h"
 #import "Errors.h"
@@ -35,7 +32,7 @@
 	if ((self = [super initWithURL:[objectManager.client URLForResourcePath:resourcePath] delegate:delegate])) {		
         _objectManager = objectManager;
         
-        [self.objectManager.client setupRequest:self];
+        [self.client setupRequest:self];
 	}
     
 	return self;
@@ -75,7 +72,7 @@
 								  [self URL], @"URL",
 								  receivedAt, @"receivedAt",
 								  nil];
-		[[NSNotificationCenter defaultCenter] postNotificationName:kRKResponseReceivedNotification
+		[[NSNotificationCenter defaultCenter] postNotificationName:RKResponseReceivedNotification
 															object:_response
 														  userInfo:userInfo];
 	} else {
@@ -84,7 +81,7 @@
 								  receivedAt, @"receivedAt",
 								  error, @"error",
 								  nil];
-		[[NSNotificationCenter defaultCenter] postNotificationName:kRKRequestFailedWithErrorNotification
+		[[NSNotificationCenter defaultCenter] postNotificationName:RKRequestFailedWithErrorNotification
 															object:self
 														  userInfo:userInfo];
 	}
@@ -104,22 +101,11 @@
 		if ([response isJSON]) {
 			error = [self.objectMapper parseErrorFromString:[response bodyAsString]];
 			[(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoader:self didFailWithError:error];
-
-		} else if ([response isServiceUnavailable] && [self.client serviceUnavailableAlertEnabled]) {
-			// TODO: Break link with the client by using notifications
-			if ([_delegate respondsToSelector:@selector(objectLoaderDidLoadUnexpectedResponse:)]) {
-				[(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoaderDidLoadUnexpectedResponse:self];
-			}
-
-			UIAlertView* alertView = [[UIAlertView alloc] initWithTitle:[self.client serviceUnavailableAlertTitle]
-																message:[self.client serviceUnavailableAlertMessage]
-															   delegate:nil
-													  cancelButtonTitle:NSLocalizedString(@"OK", nil)
-													  otherButtonTitles:nil];
-			[alertView show];
-			[alertView release];
-
 		} else {
+            if ([response isServiceUnavailable]) {
+                [[NSNotificationCenter defaultCenter] postNotificationName:RKServiceDidBecomeUnavailableNotification object:self];
+            }
+            
 			if ([_delegate respondsToSelector:@selector(objectLoaderDidLoadUnexpectedResponse:)]) {
 				[(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoaderDidLoadUnexpectedResponse:self];
 			}
@@ -164,7 +150,7 @@
 	/**
 	 * If this loader is bound to a particular object, then we map
 	 * the results back into the instance. This is used for loading and updating
-	 * individual object instances via getObject & friends.
+	 * individual object instances via getObject and friends.
 	 */
 	NSArray* results = nil;
 	if (self.targetObject) {
@@ -199,20 +185,24 @@
 
 - (void)didFinishLoad:(RKResponse*)response {
 	_response = [response retain];
-
-	if ([_delegate respondsToSelector:@selector(request:didLoadResponse:)]) {
-		[_delegate request:self didLoadResponse:response];
-	}
-
+    
+    if ([_delegate respondsToSelector:@selector(request:didLoadResponse:)]) {
+        [_delegate request:self didLoadResponse:response];
+    }
+    
 	if (NO == [self encounteredErrorWhileProcessingRequest:response]) {
-		// TODO: When other mapping formats are supported, unwind this assumption... Should probably be an expected MIME types array set by client/manager
-		if ([response isSuccessful] && [response isJSON]) {
+        // TODO: Should probably be an expected MIME types array set by client/manager
+        // if ([self.objectMapper hasParserForMIMEType:[response MIMEType]) canMapFromMIMEType:
+        BOOL isAcceptable = (self.objectMapper.format == RKMappingFormatXML && [response isXML]) ||
+                            (self.objectMapper.format == RKMappingFormatJSON && [response isJSON]);
+		if ([response isSuccessful] && isAcceptable) {
 			[self performSelectorInBackground:@selector(processLoadModelsInBackground:) withObject:response];
 		} else {
 			NSLog(@"Encountered unexpected response code: %d (MIME Type: %@)", response.statusCode, response.MIMEType);
 			if ([_delegate respondsToSelector:@selector(objectLoaderDidLoadUnexpectedResponse:)]) {
 				[(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoaderDidLoadUnexpectedResponse:self];
 			}
+            
 			[self responseProcessingSuccessful:NO withError:nil];
 		}
 	}

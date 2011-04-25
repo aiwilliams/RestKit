@@ -21,6 +21,13 @@
     
     // Initialize RestKit
 	RKObjectManager* objectManager = [RKObjectManager objectManagerWithBaseURL:@"http://twitter.com"];
+    
+    // Enable automatic network activity indicator management
+    [RKRequestQueue sharedQueue].showsNetworkActivityIndicatorWhenBusy = YES;
+    
+    // Uncomment this to use XML, comment it to use JSON
+    [objectManager setFormat:RKMappingFormatXML];
+    
 	RKObjectMapper* mapper = objectManager.mapper;
 	
 	// Add our element to object mappings

@@ -21,7 +21,10 @@
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Initialize RestKit
 	RKObjectManager* objectManager = [RKObjectManager objectManagerWithBaseURL:@"http://twitter.com"];
-	RKObjectMapper* mapper = objectManager.mapper;	    
+	RKObjectMapper* mapper = objectManager.mapper;
+    
+    // Enable automatic network activity indicator management
+    [RKRequestQueue sharedQueue].showsNetworkActivityIndicatorWhenBusy = YES;
     
     // Update date format so that we can parse twitter dates properly
 	// Wed Sep 29 15:31:08 +0000 2010
@@ -53,7 +56,7 @@
     
     // NOTE: If all of your mapped objects use element -> class registration, you can perform seeding in one line of code:
     // [RKManagedObjectSeeder generateSeedDatabaseWithObjectManager:objectManager fromFiles:@"users.json", nil];
-#endif    	
+#endif
     
     // Initialize object store
     objectManager.objectStore = [RKManagedObjectStore objectStoreWithStoreFilename:@"RKTwitterData.sqlite" usingSeedDatabaseName:RKDefaultSeedDatabaseFileName managedObjectModel:nil];

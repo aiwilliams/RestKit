@@ -1,51 +1,51 @@
+#!/usr/bin/env ruby
 # RestKit Spec Server
 
 require 'rubygems'
-require 'sinatra'
+#require 'sinatra'
+require 'sinatra/base'
 require 'json'
 require 'ruby-debug'
-
 Debugger.start
 
-class Model
-  def self.attributes(*attributes)
-    @attributes ||= []
-    @attributes += attributes
-    attributes.each { |attr| attr_accessor attr }
-  end
-  
-  def self.defined_attributes
-    @attributes
-  end
-  
-  def initialize(options = {})
-    options.each { |k,v| self.send("#{k}=", v) }
-  end
-  
-  def to_hash
-    self.class.defined_attributes.inject({}) { |hash, attr| hash[attr] = self.send(attr); hash }
-  end
-  
-  def to_json
-    JSON.generate(self.to_hash)
-  end
-end
+# Import the RestKit Spec server
+$: << File.join(File.expand_path(File.dirname(__FILE__)), 'lib')
+require 'restkit'
 
+# TODO: Factor me out...
 class Human < Model
   attributes :id, :name, :sex, :age, :birthday, :created_at, :updated_at
 end
 
-post '/photo' do
-  content_type 'application/json'
-  "OK"
-end
+class RestKit::SpecServer < Sinatra::Base
+  self.app_file = __FILE__
+  use RestKit::Network::Authentication
+  
+  configure do
+    set :logging, true
+    set :dump_errors, true
+  end
+  
+  get '/' do
+    "OK"
+  end
+  
+  post '/photo' do
+    content_type 'application/json'
+    "OK"
+  end
 
-get '/humans/1' do
-  content_type 'application/json'
-  JSON.generate(:human => Human.new(:name => 'Blake Watters').to_hash)
-end
+  # TODO: Move to object_mapping dir
+  get '/humans/1' do
+    content_type 'application/json'
+    JSON.generate(:human => Human.new(:name => 'Blake Watters').to_hash)
+  end
 
-get '/humans' do
-  content_type 'application/json'
-  JSON.generate([{:human => Human.new(:name => 'Blake Watters').to_hash}, {:human => Human.new(:name => "Other").to_hash}])
+  get '/humans' do
+    content_type 'application/json'
+    JSON.generate([{:human => Human.new(:name => 'Blake Watters').to_hash}, {:human => Human.new(:name => "Other").to_hash}])
+  end
+  
+  # start the server if ruby file executed directly
+  run! if app_file == $0
 end

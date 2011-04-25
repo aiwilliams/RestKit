@@ -6,7 +6,9 @@
 //  Copyright 2009 Two Toasters. All rights reserved.
 //
 
+#if TARGET_OS_IPHONE
 #import <MobileCoreServices/UTType.h>
+#endif
 #import "RKParamsAttachment.h"
 
 /**
@@ -24,7 +26,8 @@ extern NSString* const kRKStringBoundary;
 
 - (id)initWithName:(NSString*)name {
 	if ((self = [self init])) {
-		_name = [name retain];
+        self.name = name;
+        self.fileName = @"";
 	}
 	
 	return self;

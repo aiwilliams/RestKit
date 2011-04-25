@@ -12,17 +12,25 @@
 @interface RKSpecResponseLoader : NSObject <RKObjectLoaderDelegate> {
 	BOOL _awaitingResponse;
 	BOOL _success;
-	id _response;
+    BOOL _wasCancelled;
+	RKResponse* _response;
+    NSArray* _objects;
 	NSError* _failureError;
 	NSString* _errorMessage;
 	NSTimeInterval _timeout;
 }
 
-// The object that was loaded from the web request
-@property (nonatomic, readonly) id response;
+// The response that was loaded from the web request
+@property (nonatomic, readonly) RKResponse* response;
+
+// The objects that were loaded (if any)
+@property (nonatomic, readonly) NSArray* objects;
 
 // True when the response is success
 @property (nonatomic, readonly) BOOL success;
+
+// YES when the request was cancelled
+@property (nonatomic, readonly) BOOL wasCancelled;
 
 // The error that was returned from a failure to connect
 @property (nonatomic, readonly) NSError* failureError;
@@ -32,8 +40,10 @@
 
 @property (nonatomic, assign)	NSTimeInterval timeout;
 
+// Return a new auto-released loader
++ (RKSpecResponseLoader*)responseLoader;
+
 // Wait for a response to load
 - (void)waitForResponse;
-- (void)loadResponse:(id)response;
 
 @end

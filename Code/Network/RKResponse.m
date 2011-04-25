@@ -9,23 +9,25 @@
 #import "RKResponse.h"
 #import "RKNotifications.h"
 #import "RKJSONParser.h"
+#import "RKNetwork.h"
 
 @implementation RKResponse
 
 @synthesize body = _body, request = _request, failureError = _failureError;
 
 - (id)init {
-	if (self = [super init]) {
+    self = [super init];
+	if (self) {
 		_body = [[NSMutableData alloc] init];
 		_failureError = nil;
-		_loading = NO;
 	}
 
 	return self;
 }
 
 - (id)initWithRequest:(RKRequest*)request {
-	if (self = [self init]) {
+    self = [self init];
+	if (self) {
 		// We don't retain here as we're letting RKRequestQueue manage
 		// request ownership
 		_request = request;
@@ -35,14 +37,14 @@
 }
 
 - (id)initWithSynchronousRequest:(RKRequest*)request URLResponse:(NSURLResponse*)URLResponse body:(NSData*)body error:(NSError*)error {
-	if (self = [super init]) {
+    self = [super init];
+	if (self) {
 		// TODO: Does the lack of retain here cause problems with synchronous requests, since they
 		// are not being retained by the RKRequestQueue??
 		_request = request;
 		_httpURLResponse = [URLResponse retain];
 		_failureError = [error retain];
 		_body = [body retain];
-		_loading = NO;
 	}
 
 	return self;
@@ -59,9 +61,9 @@
 - (void)connection:(NSURLConnection *)connection didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge *)challenge {
     if ([challenge previousFailureCount] == 0) {
         NSURLCredential *newCredential;
-        newCredential=[NSURLCredential credentialWithUser:[NSString stringWithFormat:@"%@", _request.username]
-                                                 password:[NSString stringWithFormat:@"%@", _request.password]
-                                              persistence:NSURLCredentialPersistenceNone];
+        newCredential = [NSURLCredential credentialWithUser:[NSString stringWithFormat:@"%@", _request.username]
+                                                   password:[NSString stringWithFormat:@"%@", _request.password]
+                                                persistence:RKNetworkGetGlobalCredentialPersistence()];
         [[challenge sender] useCredential:newCredential
                forAuthenticationChallenge:challenge];
     } else {
@@ -69,21 +71,11 @@
     }
 }
 
-- (void)dispatchRequestDidStartLoadIfNecessary {
-	if (NO == _loading) {
-		_loading = YES;
-		if ([[_request delegate] respondsToSelector:@selector(requestDidStartLoad:)]) {
-			[[_request delegate] requestDidStartLoad:_request];
-		}
-	}
-}
-
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {
 	[_body appendData:data];
 }
 
-- (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSHTTPURLResponse *)response {
-	[self dispatchRequestDidStartLoadIfNecessary];
+- (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSHTTPURLResponse *)response {	
 	_httpURLResponse = [response retain];
 }
 
@@ -103,7 +95,6 @@
 // in connection:didReceiveResponse: to ensure that the RKRequestDelegate
 // callbacks get called in the correct order.
 - (void)connection:(NSURLConnection *)connection didSendBodyData:(NSInteger)bytesWritten totalBytesWritten:(NSInteger)totalBytesWritten totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite {
-	[self dispatchRequestDidStartLoadIfNecessary];
 	
 	if ([[_request delegate] respondsToSelector:@selector(request:didSendBodyData:totalBytesWritten:totalBytesExpectedToWrite:)]) {
 		[[_request delegate] request:_request didSendBodyData:bytesWritten totalBytesWritten:totalBytesWritten totalBytesExpectedToWrite:totalBytesExpectedToWrite];
