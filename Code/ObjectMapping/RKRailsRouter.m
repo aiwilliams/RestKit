@@ -31,6 +31,40 @@
 
 #pragma mark RKRouter
 
+- (void) scrubPrimaryKey: (NSMutableDictionary*) attributes whenNewRecord:(NSObject<RKObjectMappable>*) object {
+  Class class = [object class]; 
+  if ([class respondsToSelector:@selector(primaryKeyProperty)]) { 
+    NSString* primaryKey = [class performSelector:@selector(primaryKeyProperty)]; 
+    id primaryKeyValue = [object valueForKey:primaryKey]; 
+    NSString* primaryKeyValueString = [NSString stringWithFormat:@"%@", primaryKeyValue];
+    if (primaryKeyValue == nil || [primaryKeyValueString isEqualToString:@"0"])
+      [attributes removeObjectForKey:@"id"];
+  } else { 
+    NSLog(@"ERROR: expected %@ to respond to primaryKeyProperty", object); 
+  } 
+}
+
+- (NSMutableDictionary*) mappableAttributes: (NSObject<RKObjectMappable>*) object  {
+  NSMutableDictionary* attributes = [RKObjectMappableGetPropertiesByElement(object) mutableCopy];
+  [self scrubPrimaryKey:attributes whenNewRecord:object];
+  
+  NSDictionary* associations = [object relationshipsForSerialization];
+  for (NSString* associationName in [associations allKeys]) {
+    id associationTarget = [associations objectForKey:associationName];
+    if ([associationTarget isKindOfClass:[NSArray class]] ||
+        [associationTarget isKindOfClass:[NSSet class]]) {
+      NSMutableArray* childrensAttributes = [NSMutableArray array];
+      for (id associationObject in associationTarget)
+        [childrensAttributes addObject:[self mappableAttributes:associationObject]];
+      [attributes setObject:childrensAttributes forKey:[NSString stringWithFormat:@"%@_attributes", associationName]];
+    } else {
+      NSDictionary* associationAttributes = [self mappableAttributes:associationTarget];
+      [attributes setObject:associationAttributes forKey:[NSString stringWithFormat:@"%@_attributes", associationName]];
+    }
+  }
+  return attributes;
+}
+
 - (NSObject<RKRequestSerializable>*)serializationForObject:(NSObject<RKObjectMappable>*)object method:(RKRequestMethod)method {
 	// Rails does not send parameters for delete requests.
 	if (method == RKRequestMethodDELETE) {
@@ -79,12 +113,12 @@
                         NSString* primaryKeyValueString = [NSString stringWithFormat:@"%@", primaryKeyValue];
                         if (primaryKeyValue == nil || [primaryKeyValueString isEqualToString:@"0"]) { 
                             // add child attributes, excluding id
-                            NSMutableDictionary* childAttributes = [RKObjectMappableGetPropertiesByElement(child) mutableCopy];
+                            NSMutableDictionary* childAttributes = [self mappableAttributes: child];
                             [childAttributes removeObjectForKey:@"id"];
                             [children addObject:[NSDictionary dictionaryWithDictionary:childAttributes]];
                         } else { 
                             // add child attributes, including id
-                            [children addObject:RKObjectMappableGetPropertiesByElement(child)];
+                            [children addObject:[self mappableAttributes:child]];
                         } 
                     } else { 
                         NSLog(@"ERROR: expected %@ to respond to primaryKeyProperty", child); 
@@ -94,7 +128,14 @@
                                                    underscoredModelName, elementName];
                 [resourceParams setValue:children 
                                   forKey:railsRelationshipPath]; 
-            } 
+            } else if ([relationshipElements conformsToProtocol:@protocol(RKObjectMappable)]) {
+              NSObject<RKObjectMappable>* mappableChild = (NSObject<RKObjectMappable>*)relationshipElements;
+              NSMutableDictionary* childAttributes = [self mappableAttributes:mappableChild];
+              NSString *railsRelationshipPath = [NSString stringWithFormat:@"%@[%@_attributes]", 
+                                                 underscoredModelName, elementName];
+              [resourceParams setValue:childAttributes 
+                                forKey:railsRelationshipPath]; 
+            }
         } 
         @catch (NSException* e) { 
             NSLog(@"Caught exception:%@ when trying valueForKey with property: %@ for object:%@", e, elementName, object); 

@@ -8,7 +8,7 @@
 
 #import "RKManagedObject.h"
 
-@class RKCat;
+@class RKCat, RKHouse;
 
 @interface RKHuman : RKManagedObject {	
 }
@@ -23,6 +23,7 @@
 @property (nonatomic, retain) NSDate* updatedAt;
 
 @property (nonatomic, retain) NSSet* cats;
+@property (nonatomic, retain) RKHouse* house;
 
 @end
 

@@ -21,15 +21,17 @@
 @dynamic updatedAt;
 
 @dynamic cats;
+@dynamic house;
 
 + (NSDictionary*)elementToRelationshipMappings {
     return [NSDictionary dictionaryWithKeysAndObjects:
             @"cats", @"cats",
+            @"house", @"house",
             nil];
 }
 
 + (NSArray*)relationshipsToSerialize {
-    return [NSArray arrayWithObject:@"cats"];
+    return [NSArray arrayWithObjects:@"cats", @"house", nil];
 }
 
 + (NSDictionary*)elementToPropertyMappings {

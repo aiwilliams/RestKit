@@ -7,6 +7,7 @@
 //
 
 #import "RKManagedObject.h"
+#import "RKResident.h"
 
 
 @interface RKHouse : RKManagedObject {
@@ -22,4 +23,13 @@
 @property (nonatomic, retain) NSDate* updatedAt;
 @property (nonatomic, retain) NSString* zip;
 
+@property (nonatomic, retain) NSSet* residents;
+
+@end
+
+@interface RKHouse (CoreDataGeneratedAccessors)
+- (void)addResidentsObject:(RKResident *)value;
+- (void)removeResidentsObject:(RKResident *)value;
+- (void)addResidents:(NSSet *)value;
+- (void)removeResidents:(NSSet *)value;
 @end

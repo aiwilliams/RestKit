@@ -17,4 +17,15 @@
 @dynamic houseId;
 @dynamic house;
 
++ (NSDictionary*)elementToPropertyMappings {
+	return [NSDictionary dictionaryWithObjectsAndKeys:
+          @"residableId", @"residable_id",
+          @"railsID", @"id",
+          nil];
+}
+
++ (NSString*)primaryKeyProperty {
+	return @"railsID";
+}
+
 @end

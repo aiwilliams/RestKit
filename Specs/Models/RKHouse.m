@@ -20,5 +20,32 @@
 @dynamic updatedAt;
 @dynamic zip;
 
+@dynamic residents;
+
++ (NSDictionary*)elementToPropertyMappings {
+	return [NSDictionary dictionaryWithObjectsAndKeys:
+          @"city", @"city",
+          @"state", @"state",
+          @"street", @"street",
+          @"zip", @"zip",
+          @"createdAt", @"created-at",
+          @"updatedAt", @"updated-at",
+          @"railsID", @"id",
+          nil];
+}
+
++ (NSDictionary*)elementToRelationshipMappings {
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+          @"residents", @"residents",
+          nil];
+}
+
++ (NSString*)primaryKeyProperty {
+	return @"railsID";
+}
+
++ (NSArray*)relationshipsToSerialize {
+  return [NSArray arrayWithObject:@"residents"];
+}
 
 @end
