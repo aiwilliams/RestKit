@@ -45,7 +45,7 @@
 }
 
 - (NSMutableDictionary*) mappableAttributes: (NSObject<RKObjectMappable>*) object  {
-  NSMutableDictionary* attributes = [RKObjectMappableGetPropertiesByElement(object) mutableCopy];
+  NSMutableDictionary* attributes = [[object propertiesForSerialization] mutableCopy];
   [self scrubPrimaryKey:attributes whenNewRecord:object];
   
   NSDictionary* associations = [object relationshipsForSerialization];
